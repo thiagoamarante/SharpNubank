@@ -15,5 +15,7 @@ namespace SharpNubank.Models
         public string EndPointCustomer { get; set; }
 
         public string EndPointSavingsAccount { get; set; }
+
+        public string EndPointAccount { get; set; }
     }
 }

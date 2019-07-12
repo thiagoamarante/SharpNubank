@@ -30,8 +30,13 @@ namespace SharpNubank
             {
                 var jsonAccessToken = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(accessToken));
                 _AccessToken = JsonConvert.DeserializeObject<AccessToken>(jsonAccessToken);
+                SetAuthentication();
             } 
         }
+
+        #region Properties
+        public bool Authenticated => _AccessToken != null ? _AccessToken.Authenticated : false;
+        #endregion
 
         #region Methods
         public string GetAccessToken()
@@ -102,22 +107,54 @@ namespace SharpNubank
             return result;
         }
 
-        public async Task<Response> CustomerDetails()
+        public async Task<Response<CustomerDetails>> CustomerDetails()
         {
-            var result = new Response();
-            if (CheckAuthentication(result))
+            var result = new Response<CustomerDetails>();
+            try
             {
-
+                if (CheckAuthentication(result))
+                {
+                    var httpResponse = await _HttpClient.GetAsync(_AccessToken.EndPointCustomer);
+                    if (httpResponse.StatusCode != System.Net.HttpStatusCode.OK)
+                        result.Message = httpResponse.ReasonPhrase;
+                    else
+                    {
+                        var json = await httpResponse.Content.ReadAsStringAsync();
+                        var jObject = JObject.Parse(json);
+                        result.Data = jObject["customer"].ToObject<CustomerDetails>();
+                        result.Success = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Message = ex.Message;
             }
             return result;
         }
 
-        public async Task<Response> CreditCardEvents()
+        public async Task<Response<List<CreditCardEvent>>> CreditCardEvents()
         {
-            var result = new Response();
-            if (CheckAuthentication(result))
+            var result = new Response<List<CreditCardEvent>>();
+            try
             {
-
+                if (CheckAuthentication(result))
+                {
+                    var httpResponse = await _HttpClient.GetAsync(_AccessToken.EndPointEvents);
+                    if (httpResponse.StatusCode != System.Net.HttpStatusCode.OK)
+                        result.Message = httpResponse.ReasonPhrase;
+                    else
+                    {
+                        var json = await httpResponse.Content.ReadAsStringAsync();
+                        var jObject = JObject.Parse(json);
+                        result.Data = jObject["events"].ToObject<List<CreditCardEvent>>();
+                        result.Success = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Message = ex.Message;
             }
             return result;
         }
@@ -168,14 +205,16 @@ namespace SharpNubank
                 _AccessToken = new AccessToken()
                 {
                     Token = jObject["access_token"].ToString(),
-                    EndPointEvents = jObject["_links"]?["Events"]?["href"]?.ToString(),
+                    EndPointEvents = jObject["_links"]?["events"]?["href"]?.ToString(),
                     EndPointCustomer = jObject["_links"]?["customer"]?["href"]?.ToString(),
                     EndPointSavingsAccount = jObject["_links"]?["savings_account"]?["href"]?.ToString(),
+                    EndPointAccount = jObject["_links"]?["account"]?["href"]?.ToString()
                 };
 
-                if (!string.IsNullOrEmpty(_AccessToken.EndPointEvents) && !string.IsNullOrEmpty(_AccessToken.EndPointCustomer) && !string.IsNullOrEmpty(_AccessToken.EndPointSavingsAccount))
-                    _AccessToken.Authenticated = true;
+                if (!string.IsNullOrEmpty(_AccessToken.EndPointEvents) && !string.IsNullOrEmpty(_AccessToken.EndPointCustomer) && !string.IsNullOrEmpty(_AccessToken.EndPointSavingsAccount) && !string.IsNullOrEmpty(_AccessToken.EndPointAccount))
+                    _AccessToken.Authenticated = true;                    
 
+                SetAuthentication();
                 result.Data = new LoginResponse()
                 {
                     Token = _AccessToken.Token,
@@ -192,13 +231,13 @@ namespace SharpNubank
 
         private bool CheckAuthentication(Response response)
         {
-            return false;
-            //if (_AccessToken?.Authenticated)
-            //{
-            //    response.Success = false;
-            //    response.Message = "You must be logged in to use this feature";
-            //}
-            //return response.Success;
+            if (_AccessToken == null || !_AccessToken.Authenticated)
+            {
+                response.Success = false;
+                response.Message = "You must be logged in to use this feature";
+                return false;
+            }
+            return true;
         }
 
         private async Task DiscoveryUrl()
@@ -226,6 +265,16 @@ namespace SharpNubank
                 var json = await httpResponse.Content.ReadAsStringAsync();
                 var jObject = JObject.Parse(json);
                 _EndPointLift = jObject["lift"].ToString();
+            }
+        }
+
+        private void SetAuthentication()
+        {
+            if (_AccessToken == null || !_AccessToken.Authenticated)
+                _HttpClient.DefaultRequestHeaders.Authorization = null;
+            else
+            {
+                _HttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _AccessToken.Token);
             }
         }
         #endregion

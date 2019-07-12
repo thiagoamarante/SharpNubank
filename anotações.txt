@@ -1,0 +1,2 @@
+https://github.com/andreroggeri/pynubank
+https://github.com/lira92/nubank-dotnet
